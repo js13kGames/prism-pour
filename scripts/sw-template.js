@@ -5,7 +5,10 @@ self.addEventListener('install',event=>event.waitUntil((async()=>{
   // Verify every file before this worker becomes installable. Partial or mixed
   // deployments leave the previous complete offline release untouched.
   await Promise.all(Object.entries(ASSETS).map(async([path,hash])=>{
-   const url=new URL(path,self.registration.scope);
+   // Static hosting may canonicalize /index.html to the scope root. Fetch the
+   // shell from that canonical URL so a normal redirect cannot abort the
+   // service-worker install and leave the installed app without an offline UI.
+   const url=new URL(path==='index.html'?'./':path,self.registration.scope);
    const response=await fetch(url,{cache:'no-store'});
    if(!response.ok||response.redirected)throw Error('Incomplete update');
    const bytes=await response.clone().arrayBuffer();
@@ -30,7 +33,7 @@ self.addEventListener('fetch',event=>{
  if(!(path in ASSETS))return;
  event.respondWith((async()=>{
   const cache=await caches.open(CACHE);
-  const saved=await cache.match(new URL(path,scope));
+  const saved=await cache.match(new URL(path==='index.html'?'./':path,scope));
   return saved||fetch(event.request);
  })());
 });
