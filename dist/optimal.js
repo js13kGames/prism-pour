@@ -6,6 +6,7 @@ const key=b=>b.map(t=>t.map(c=>String.fromCharCode(65+c)).join('')).sort().join(
 // are interchangeable, so canonical states eliminate equivalent permutations.
 export function optimal(board,report=()=>{}){
  let bound=lowerBound(board),visits=0,last=0;
+ const path=[];
  for(;;){
   report({minimum:bound,exact:false});
   const seen=new Map();
@@ -19,13 +20,13 @@ export function optimal(board,report=()=>{}){
     // Moving a uniform tube to an empty tube only renames interchangeable tubes.
     if(!b[z].length&&b[a].every(c=>c===b[a][0]))continue;
     const m=move(b,a,z);if(!m)continue;const ck=key(m.board);if(unique.has(ck))continue;unique.add(ck);
-    children.push({b:m.board,h:lowerBound(m.board)});
+    children.push({b:m.board,h:lowerBound(m.board),a,z});
    }
    children.sort((a,b)=>a.h-b.h);
-   for(const c of children){const n=search(c.b,g+1);if(n===-1)return -1;next=Math.min(next,n)}
+   for(const c of children){path.push([c.a,c.z]);const n=search(c.b,g+1);if(n===-1)return -1;path.pop();next=Math.min(next,n)}
    return next;
   }
-  const result=search(board,0);if(result===-1){report({minimum:bound,exact:true});return bound}
+  const result=search(board,0);if(result===-1){report({minimum:path.length,exact:true,path:path.map(m=>m.slice())});return path.length}
   if(!Number.isFinite(result))throw Error('No solution found');bound=result;
  }
 }

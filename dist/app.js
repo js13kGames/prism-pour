@@ -3,7 +3,7 @@ import{generate,clone,complete,won,move,colorCount,MAX_LEVEL}from'./engine.js';
 const $=s=>document.querySelector(s),colors=['#ff9fbe','#00e5dc','#9b59f5','#ffe13b','#69bfff','#b2ed36','#ff8824','#f5f1e8','#ed3545','#139b56','#354dcc','#ef35bb'],names=['rose','aqua','violet','gold','blue','lime','orange','pearl','ruby','jade','indigo','magenta'];
 const icons={undo:'<path d="M9 5 3 11l6 6M3 11h11a7 7 0 0 1 0 14" transform="translate(1 -3)"/>',restart:'<path d="M20 10a8 8 0 1 1-5-6M15 1v5h5"/>',extra:'<path d="M12 4v16M4 12h16"/>',sound:'<path d="m11 4-5 4H3v8h3l5 4ZM15 8q5 4 0 8M18 4q9 8 0 16"/>',mute:'<path d="m11 4-5 4H3v8h3l5 4ZM16 9l6 6m0-6-6 6"/>'};const icon=n=>`<svg viewBox="0 0 24 24" aria-hidden="true">${icons[n]}</svg>`;['undo','restart','extra'].forEach(n=>$('#'+n+' .circle').innerHTML=icon(n));
 let level=1,board=[],history=[],selected=-1,moves=0,sound=false,extra=false,audio;const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
-let startBoard=null;
+let startBoard=null, replayMoves=[];
 let unlocked=1,allUnlocked=false,completed=new Set(),sessions={},levelPage=0;
 const validLevel=n=>Number.isInteger(n)&&n>=1&&n<=MAX_LEVEL;
 function validBoard(b,l){
@@ -17,6 +17,7 @@ function validBoard(b,l){
 try{
   const s=JSON.parse(localStorage.getItem('prism-pour'));
   if(s&&validLevel(s.level)){
+    replayMoves=Array.isArray(s.replayMoves)?s.replayMoves:null;
     level=s.level;sound=!!s.sound;unlocked=Math.max(level,validLevel(s.unlocked)?s.unlocked:level);
     allUnlocked=s.allUnlocked===true;
     completed=new Set(Array.isArray(s.completed)?s.completed.filter(validLevel):Array.from({length:level-1},(_,i)=>i+1));
@@ -27,8 +28,8 @@ try{
 if(!board.length)board=generate(level).board;
 if(!startBoard)startBoard=clone(board);
 function save(){
-  sessions[level]={board:clone(board),startBoard:clone(startBoard),moves,extra};
-  try{localStorage.setItem('prism-pour',JSON.stringify({level,board,startBoard,moves,sound,unlocked,allUnlocked,completed:[...completed],sessions}));}catch{}
+  sessions[level]={board:clone(board),startBoard:clone(startBoard),moves,extra,replayMoves};
+  try{localStorage.setItem('prism-pour',JSON.stringify({level,board,startBoard,replayMoves,moves,sound,unlocked,allUnlocked,completed:[...completed],sessions}));}catch{}
 }
 function recordWin(){if(won(board)){completed.add(level);unlocked=Math.max(unlocked,Math.min(MAX_LEVEL,level+1));}}
 function tone(freq=500,duration=.12){if(!sound)return;try{audio??=new(window.AudioContext||window.webkitAudioContext)();audio.resume();let o=audio.createOscillator(),g=audio.createGain();o.type='sine';o.frequency.setValueAtTime(freq,audio.currentTime);o.frequency.exponentialRampToValueAtTime(freq*.7,audio.currentTime+duration);g.gain.setValueAtTime(.065,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+duration);}catch{}}
@@ -67,13 +68,13 @@ container.querySelectorAll('.tube').forEach((el,i)=>{
  el.setAttribute('aria-label',`Tube ${i+1}: ${t.length?t.map(c=>names[c]).join(', ')+', bottom to top':'empty'}${complete(t)?', sorted':''}`);
 });renderSelection();if(resized)fitBoard();$('#level').textContent='LEVEL '+String(level).padStart(2,'0');$('#moves').textContent=moves;$('#sorted').textContent=board.filter(complete).length+' of '+(generateCount())+' sorted';$('#undo').disabled=!history.length;$('#extra').disabled=extra||board.length>=14;$('#sound').innerHTML=icon(sound?'sound':'mute');$('#sound').setAttribute('aria-label',sound?'Turn sound off':'Turn sound on');}
 function generateCount(){return new Set(board.flat()).size}
-function flyMarbles(a,i,result,sourceLength,destLength,from,to){
+function flyMarbles(a,i,result,sourceLength,destLength,from,to,sourceLift=0){
   if(reduced)return;
   for(let j=0;j<result.count;j++){
     const slot=destLength+j;
     const size=44*from.width/82;
     const x=from.left+from.width/2-size/2;
-    const y=from.top+(127-(sourceLength-1-j)*38)*from.width/82;
+    const y=from.top+(127-(sourceLength-1-j)*38-sourceLift)*from.width/82;
     const dx=to.left+to.width/2-size/2-x;
     const dy=to.top+(127-slot*38)*to.width/82-y;
     const el=document.createElement('div');el.className='flying-marble';
@@ -101,9 +102,11 @@ function choose(i){
   cancelWin();settleFlights(a);settleFlights(i);
   const from=$(`[data-i="${a}"]`).getBoundingClientRect(),to=$(`[data-i="${i}"]`).getBoundingClientRect();
   const sourceLength=board[a].length,destLength=board[i].length;
-  history.push({board:clone(board),moves,extra});
-  board=result.board;moves++;selected=-1;
-  flyMarbles(a,i,result,sourceLength,destLength,from,to);
+  let sourceRun=0;for(let j=sourceLength-1;j>=0&&board[a][j]===board[a].at(-1);j--)sourceRun++;
+  const sourceLift=174-(sourceLength-sourceRun)*38;
+  history.push({board:clone(board),moves,extra,replayLength:replayMoves?.length});
+  replayMoves?.push([a,i]);board=result.board;moves++;selected=-1;
+  flyMarbles(a,i,result,sourceLength,destLength,from,to,sourceLift);
   recordWin();render();save();tone(660+result.count*45,.09);vibrate(8);
   $('#message').textContent='Tap a tube, then tap another to move marbles.';
   if(complete(board[i])){
@@ -113,14 +116,14 @@ function choose(i){
   if(won(board))winTimer=setTimeout(()=>{winTimer=0;if(won(board))celebrate()},reduced?0:260);
 }
 function celebrate(){downloadUpdate();showMinimum();recordWin();save();$('#next').textContent=level===MAX_LEVEL?'Choose a level':'Next level →';$('#win-text').textContent=`Level ${level} complete in ${moves} moves. Take a breath. Enjoy the little win.`;if(!$('#win-dialog').open)$('#win-dialog').showModal();if(!reduced){burst(innerWidth*.3,innerHeight*.4,70);burst(innerWidth*.7,innerHeight*.4,70)}}
-function reset(){stopMinimum();cancelWin();settleFlights();board=generate(level).board;startBoard=clone(board);history=[];moves=0;extra=false;selected=-1;render();save();$('#message').textContent='Tap a tube, then tap another to move marbles.'}
-$('#undo').onclick=()=>{if(!history.length)return;cancelWin();settleFlights();let s=history.pop();board=s.board;moves=s.moves;extra=s.extra;selected=-1;render();save();tone(390)};$('#restart').onclick=()=>reset();$('#extra').onclick=()=>{if(extra||board.length>=14)return;cancelWin();settleFlights();history.push({board:clone(board),moves,extra});board.push([]);extra=true;selected=-1;render();save();$('#message').textContent='A little breathing room. Always free.';tone(780)};$('#sound').onclick=()=>{sound=!sound;render();save();tone(720)};$('#help').onclick=()=>{settleFlights();$('#help-dialog').showModal()};$('#got-it').onclick=$('.close').onclick=()=>$('#help-dialog').close();$('#next').onclick=()=>{if(level===MAX_LEVEL){$('#win-dialog').close();openLevels();return}changeLevel(level+1)};$('#replay').onclick=()=>{$('#win-dialog').close();reset()};document.addEventListener('keydown',e=>{if(e.key==='Escape'){selected=-1;render()}if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!document.querySelector('dialog[open]')){e.preventDefault();$('#undo').click()}});
+function reset(){stopMinimum();cancelWin();settleFlights();board=generate(level).board;startBoard=clone(board);history=[];replayMoves=[];moves=0;extra=false;selected=-1;render();save();$('#message').textContent='Tap a tube, then tap another to move marbles.'}
+$('#undo').onclick=()=>{if(!history.length)return;cancelWin();settleFlights();let s=history.pop();board=s.board;moves=s.moves;extra=s.extra;if(replayMoves)replayMoves.length=s.replayLength;selected=-1;render();save();tone(390)};$('#restart').onclick=()=>reset();$('#extra').onclick=()=>{if(extra||board.length>=14)return;cancelWin();settleFlights();history.push({board:clone(board),moves,extra,replayLength:replayMoves?.length});replayMoves?.push("extra");board.push([]);extra=true;selected=-1;render();save();$('#message').textContent='A little breathing room. Always free.';tone(780)};$('#sound').onclick=()=>{sound=!sound;render();save();tone(720)};$('#help').onclick=()=>{settleFlights();$('#help-dialog').showModal()};$('#got-it').onclick=$('.close').onclick=()=>$('#help-dialog').close();$('#next').onclick=()=>{if(level===MAX_LEVEL){$('#win-dialog').close();openLevels();return}changeLevel(level+1)};$('#replay').onclick=()=>{$('#win-dialog').close();reset()};document.addEventListener('keydown',e=>{if(e.key==='Escape'){selected=-1;render()}if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!document.querySelector('dialog[open]')){e.preventDefault();$('#undo').click()}});
 
 function switchLevel(n){
   if(!validLevel(n)||(!allUnlocked&&n>unlocked))return false;
   stopMinimum();cancelWin();settleFlights();save();level=n;history=[];selected=-1;
   const saved=sessions[n];
-  if(saved&&validBoard(saved.board,n)){board=clone(saved.board);startBoard=validBoard(saved.startBoard,n)?clone(saved.startBoard):generate(n,new Set(board.flat()).size).board;moves=Number.isInteger(saved.moves)&&saved.moves>=0?saved.moves:0;extra=board.length>new Set(board.flat()).size+2;render();save();}
+  if(saved&&validBoard(saved.board,n)){replayMoves=Array.isArray(saved.replayMoves)?saved.replayMoves:null;board=clone(saved.board);startBoard=validBoard(saved.startBoard,n)?clone(saved.startBoard):generate(n,new Set(board.flat()).size).board;moves=Number.isInteger(saved.moves)&&saved.moves>=0?saved.moves:0;extra=board.length>new Set(board.flat()).size+2;render();save();}
   else reset();
   $('#levels-dialog').close();$('#win-dialog').close();
   $('#message').textContent=won(board)?'Already sorted. Restart to play this level again.':'Tap a tube, then tap another to move marbles.';
@@ -172,6 +175,12 @@ function renderSelection(){
   const i=+el.dataset.i;el.classList.toggle('selected',selected===i);
   el.classList.toggle('valid',selected>=0&&!!move(board,selected,i));
   el.setAttribute('aria-pressed',String(selected===i));
+  const t=board[i];let run=0;
+  if(selected===i)for(let j=t.length-1;j>=0&&t[j]===t.at(-1);j--)run++;
+  el.querySelectorAll('.marble').forEach(ball=>{
+   const lifted=run>0&&+ball.dataset.slot>=t.length-run;
+   ball.style.transform=lifted?`translateY(-${174-(t.length-run)*38}px)`:'';
+  });
  });
 }
 // Touch-down is the action, not a delayed synthetic click on release.
@@ -209,24 +218,67 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)settleFligh
 
 let optimalWorker=null;
 function stopMinimum(){optimalWorker?.terminate();optimalWorker=null;}
+let bestReplay=null, yourReplay=null, comparisonStep=0;
+function replayPath(initial,path){
+ if(!Array.isArray(path))return null;
+ let b=clone(initial),steps=[{board:clone(b),label:'Starting puzzle'}],count=0;
+ for(const event of path){
+  if(event==='extra'){if(b.length>=14)return null;b.push([]);steps[steps.length-1].board=clone(b);steps[steps.length-1].label+=' · extra tube added (free)';continue}
+  if(!Array.isArray(event)||event.length!==2||!event.every(Number.isInteger))return null;
+  const [a,z]=event,result=move(b,a,z);if(!result)return null;
+  b=result.board;count++;
+  steps.push({board:clone(b),label:`Move ${count}: tube ${a+1} → ${z+1} · ${result.count} marble${result.count===1?'':'s'}`});
+ }
+ return {steps,count,board:b};
+}
+function renderComparison(){
+ const max=Math.max(yourReplay?.count||0,bestReplay?.count||0);
+ comparisonStep=Math.min(comparisonStep,max);
+ $('#compare-step').max=max;$('#compare-step').value=comparisonStep;
+ $('#compare-position').textContent=comparisonStep===0?'Starting puzzle':`Move ${comparisonStep} of ${max}`;
+ $('#compare-prev').disabled=comparisonStep===0;$('#compare-next').disabled=comparisonStep===max;
+ for(const [id,replay] of [['your',yourReplay],['best',bestReplay]]){
+  const frame=replay?.steps[Math.min(comparisonStep,replay.count)];
+  $('#'+id+'-caption').textContent=frame?frame.label+(comparisonStep>replay.count?' · finished':''):id==='your'?'This older attempt has no saved move history. Replay the level to record it.':'Finding a proven shortest solution…';
+  $('#'+id+'-board').innerHTML=frame?frame.board.map((t,i)=>`<div class="replay-tube" aria-label="Tube ${i+1}: ${t.map(c=>names[c]).join(', ')||'empty'}, bottom to top">${tubeSVG(t,`replay-${id}-${i}`)}<span>${i+1}</span></div>`).join(''):'';
+ }
+ $('#compare-summary').textContent=bestReplay?`You: ${moves} moves · Best: ${bestReplay.count} moves · ${moves===bestReplay.count?'Optimal!':`${moves-bestReplay.count} extra move${moves-bestReplay.count===1?'':'s'}`}`:`You: ${moves} moves · Best: calculating…`;
+}
+$('#compare').onclick=()=>{comparisonStep=0;renderComparison();$('#compare-dialog').showModal()};
+$('#compare-close').onclick=()=>$('#compare-dialog').close();
+$('#compare-prev').onclick=()=>{comparisonStep--;renderComparison()};
+$('#compare-next').onclick=()=>{comparisonStep++;renderComparison()};
+$('#compare-step').oninput=e=>{comparisonStep=+e.target.value;renderComparison()};
 function showMinimum(){
- stopMinimum();
- const initial=clone(startBoard);if(extra&&initial.length<14)initial.push([]);
- const cacheKey='prism-optimal-v1:'+JSON.stringify(initial);
+ stopMinimum();bestReplay=null;
+ yourReplay=replayPath(startBoard,replayMoves);
+ if(yourReplay&&(yourReplay.count!==moves||JSON.stringify(yourReplay.board)!==JSON.stringify(board)))yourReplay=null;
+ const initial=clone(startBoard);if(extra&&initial.length<board.length)initial.push([]);
+ const cacheKey='prism-optimal-v2:'+JSON.stringify(initial);
  const label=$('#win-minimum');
- $('#win-rules').textContent=`From the starting puzzle${extra?', with the free extra tube':''}. A matching group moved together counts as one move.`;
- try{const cached=JSON.parse(localStorage.getItem(cacheKey));if(Number.isInteger(cached)&&cached>=0){label.textContent=`Theoretical minimum: ${cached} moves`;return}}catch{}
- label.textContent='Theoretical minimum: calculating…';
+ $('#win-rules').textContent=`From the starting puzzle${extra?', with the free extra tube available from the start':''}. A matching group moved together counts as one move. The final move counts; selections and undo do not.`;
+ function accept(data){
+  if(data.exact){
+   const candidate=replayPath(initial,data.path);
+   if(!candidate||!won(candidate.board)||candidate.count!==data.minimum)throw Error('Invalid solution');
+   bestReplay=candidate;
+  }
+  label.textContent=data.exact?`Theoretical minimum: ${data.minimum} moves`:`Theoretical minimum: at least ${data.minimum} moves · still calculating`;
+  renderComparison();
+ }
+ try{const cached=JSON.parse(localStorage.getItem(cacheKey));if(cached?.exact){accept(cached);return}}catch{}
+ label.textContent='Theoretical minimum: calculating…';renderComparison();
+ function failed(){label.textContent='Theoretical minimum: unavailable';$('#best-caption').textContent='The best solution could not be calculated. Reopen this level to retry.';stopMinimum()}
  try{
   optimalWorker=new Worker('./optimal-worker.js',{type:'module'});
   optimalWorker.onmessage=({data})=>{
-   if(data.error){label.textContent='Theoretical minimum: unavailable';stopMinimum();return}
-   label.textContent=data.exact?`Theoretical minimum: ${data.minimum} moves`:`Theoretical minimum: at least ${data.minimum} moves · still calculating`;
-   if(data.exact){try{localStorage.setItem(cacheKey,JSON.stringify(data.minimum))}catch{}stopMinimum()}
+   if(data.error){failed();return}
+   try{accept(data)}catch{failed();return}
+   if(data.exact){try{localStorage.setItem(cacheKey,JSON.stringify(data))}catch{}stopMinimum()}
   };
-  optimalWorker.onerror=()=>{label.textContent='Theoretical minimum: unavailable';stopMinimum()};
+  optimalWorker.onerror=failed;
   optimalWorker.postMessage({board:initial});
- }catch{label.textContent='Theoretical minimum: unavailable';stopMinimum()}
+ }catch{failed()}
 }
 $('#win-dialog').addEventListener('close',stopMinimum);
 
