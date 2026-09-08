@@ -1,5 +1,5 @@
 import{generate,clone,complete,won,move,colorCount,MAX_LEVEL}from'./engine.js';
-const $=s=>document.querySelector(s),colors=['#ff698f','#2cdbd5','#a475ff','#ffc747','#66b2ff','#9bdd75','#ff933e','#f0f3ff','#d72e4e','#269481','#4054dc','#eb55dc'],names=['rose','aqua','violet','gold','blue','lime','orange','pearl','ruby','jade','indigo','magenta'];
+const $=s=>document.querySelector(s),colors=['#ff9fbe','#00e5dc','#9b59f5','#ffe13b','#69bfff','#b2ed36','#ff8824','#f5f1e8','#ed3545','#139b56','#354dcc','#ef35bb'],names=['rose','aqua','violet','gold','blue','lime','orange','pearl','ruby','jade','indigo','magenta'];
 const icons={undo:'<path d="M9 5 3 11l6 6M3 11h11a7 7 0 0 1 0 14" transform="translate(1 -3)"/>',restart:'<path d="M20 10a8 8 0 1 1-5-6M15 1v5h5"/>',extra:'<path d="M12 4v16M4 12h16"/>',sound:'<path d="m11 4-5 4H3v8h3l5 4ZM15 8q5 4 0 8M18 4q9 8 0 16"/>',mute:'<path d="m11 4-5 4H3v8h3l5 4ZM16 9l6 6m0-6-6 6"/>'};const icon=n=>`<svg viewBox="0 0 24 24" aria-hidden="true">${icons[n]}</svg>`;['undo','restart','extra'].forEach(n=>$('#'+n+' .circle').innerHTML=icon(n));
 let level=1,board=[],history=[],selected=-1,moves=0,sound=false,extra=false,audio;const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 let unlocked=1,allUnlocked=false,completed=new Set(),sessions={},levelPage=0;
@@ -50,7 +50,7 @@ function marbleSVG(c,id){return `<svg viewBox="0 0 44 44" aria-hidden="true"><de
   </defs><circle cx="22" cy="22" r="20" fill="url(#ball${id})" stroke="${colors[c]}" stroke-width=".8"/>
   <ellipse cx="15" cy="12" rx="6" ry="3.2" transform="rotate(-32 15 12)" fill="#fff" opacity=".75"/>
   <path d="M29 36Q36 33 38 26" fill="none" stroke="${colors[c]}" stroke-width="2" stroke-linecap="round"/>
-  <circle cx="29" cy="13" r="1.8" fill="#fff" opacity=".45"/><text x="22" y="28" text-anchor="middle" fill="#fff" stroke="#17183b55" stroke-width=".7" paint-order="stroke" font-family="sans-serif" font-size="12" font-weight="700">${c+1}</text></svg>`;}
+  <circle cx="29" cy="13" r="1.8" fill="#fff" opacity=".45"/></svg>`;}
 function tubeSVG(t,id){let segments=t.map((c,i)=>{
   const hidden=[...flights].some(f=>f.to===id&&f.slot===i);
   return `<g class="marble" data-slot="${i}" style="opacity:${hidden?0:1}"><ellipse cx="41" cy="${171-i*38}" rx="17" ry="3" fill="#02061455"/><svg x="19" y="${127-i*38}" width="44" height="44">${marbleSVG(c,`${id}-${i}`)}</svg></g>`;
