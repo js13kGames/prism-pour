@@ -6,3 +6,5 @@
 @media(max-width:700px){#board.large{--tube-width:62px;grid-template-columns:repeat(5,var(--tube-width));gap:20px 10px}}
 @media(max-width:390px){#board.large{--tube-width:56px;gap:20px 8px}}
 @media(max-width:340px){#board.large{--tube-width:50px;gap:20px 6px}#levels-dialog{padding:26px 14px}#level-grid{gap:5px}}
+
+#win-minimum{color:#d6c5ff;font-weight:700}#win-rules{font-size:13px;line-height:1.5;color:#a8b2d1}

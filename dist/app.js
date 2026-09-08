@@ -2,6 +2,7 @@ import{generate,clone,complete,won,move,colorCount,MAX_LEVEL}from'./engine.js';
 const $=s=>document.querySelector(s),colors=['#ff9fbe','#00e5dc','#9b59f5','#ffe13b','#69bfff','#b2ed36','#ff8824','#f5f1e8','#ed3545','#139b56','#354dcc','#ef35bb'],names=['rose','aqua','violet','gold','blue','lime','orange','pearl','ruby','jade','indigo','magenta'];
 const icons={undo:'<path d="M9 5 3 11l6 6M3 11h11a7 7 0 0 1 0 14" transform="translate(1 -3)"/>',restart:'<path d="M20 10a8 8 0 1 1-5-6M15 1v5h5"/>',extra:'<path d="M12 4v16M4 12h16"/>',sound:'<path d="m11 4-5 4H3v8h3l5 4ZM15 8q5 4 0 8M18 4q9 8 0 16"/>',mute:'<path d="m11 4-5 4H3v8h3l5 4ZM16 9l6 6m0-6-6 6"/>'};const icon=n=>`<svg viewBox="0 0 24 24" aria-hidden="true">${icons[n]}</svg>`;['undo','restart','extra'].forEach(n=>$('#'+n+' .circle').innerHTML=icon(n));
 let level=1,board=[],history=[],selected=-1,moves=0,sound=false,extra=false,audio;const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let startBoard=null;
 let unlocked=1,allUnlocked=false,completed=new Set(),sessions={},levelPage=0;
 const validLevel=n=>Number.isInteger(n)&&n>=1&&n<=MAX_LEVEL;
 function validBoard(b,l){
@@ -19,13 +20,14 @@ try{
     allUnlocked=s.allUnlocked===true;
     completed=new Set(Array.isArray(s.completed)?s.completed.filter(validLevel):Array.from({length:level-1},(_,i)=>i+1));
     if(s.sessions&&typeof s.sessions==='object'&&!Array.isArray(s.sessions))sessions=s.sessions;
-    if(validBoard(s.board,level)){board=clone(s.board);moves=Number.isInteger(s.moves)&&s.moves>=0?s.moves:0;extra=board.length>new Set(board.flat()).size+2;}
+    if(validBoard(s.board,level)){board=clone(s.board);startBoard=validBoard(s.startBoard,level)?clone(s.startBoard):generate(level,new Set(board.flat()).size).board;moves=Number.isInteger(s.moves)&&s.moves>=0?s.moves:0;extra=board.length>new Set(board.flat()).size+2;}
   }
 }catch{}
 if(!board.length)board=generate(level).board;
+if(!startBoard)startBoard=clone(board);
 function save(){
-  sessions[level]={board:clone(board),moves,extra};
-  try{localStorage.setItem('prism-pour',JSON.stringify({level,board,moves,sound,unlocked,allUnlocked,completed:[...completed],sessions}));}catch{}
+  sessions[level]={board:clone(board),startBoard:clone(startBoard),moves,extra};
+  try{localStorage.setItem('prism-pour',JSON.stringify({level,board,startBoard,moves,sound,unlocked,allUnlocked,completed:[...completed],sessions}));}catch{}
 }
 function recordWin(){if(won(board)){completed.add(level);unlocked=Math.max(unlocked,Math.min(MAX_LEVEL,level+1));}}
 function tone(freq=500,duration=.12){if(!sound)return;try{audio??=new(window.AudioContext||window.webkitAudioContext)();audio.resume();let o=audio.createOscillator(),g=audio.createGain();o.type='sine';o.frequency.setValueAtTime(freq,audio.currentTime);o.frequency.exponentialRampToValueAtTime(freq*.7,audio.currentTime+duration);g.gain.setValueAtTime(.065,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+duration);}catch{}}
@@ -102,15 +104,15 @@ function choose(i){
   }
   if(won(board))winTimer=setTimeout(()=>{winTimer=0;if(won(board))celebrate()},reduced?0:260);
 }
-function celebrate(){recordWin();save();$('#next').textContent=level===MAX_LEVEL?'Choose a level':'Next level →';$('#win-text').textContent=`Level ${level} complete in ${moves} moves. Take a breath. Enjoy the little win.`;if(!$('#win-dialog').open)$('#win-dialog').showModal();if(!reduced){burst(innerWidth*.3,innerHeight*.4,70);burst(innerWidth*.7,innerHeight*.4,70)}}
-function reset(){cancelWin();settleFlights();board=generate(level).board;history=[];moves=0;extra=false;selected=-1;render();save();$('#message').textContent='Tap a tube, then tap another to move marbles.'}
+function celebrate(){showMinimum();recordWin();save();$('#next').textContent=level===MAX_LEVEL?'Choose a level':'Next level →';$('#win-text').textContent=`Level ${level} complete in ${moves} moves. Take a breath. Enjoy the little win.`;if(!$('#win-dialog').open)$('#win-dialog').showModal();if(!reduced){burst(innerWidth*.3,innerHeight*.4,70);burst(innerWidth*.7,innerHeight*.4,70)}}
+function reset(){stopMinimum();cancelWin();settleFlights();board=generate(level).board;startBoard=clone(board);history=[];moves=0;extra=false;selected=-1;render();save();$('#message').textContent='Tap a tube, then tap another to move marbles.'}
 $('#undo').onclick=()=>{if(!history.length)return;cancelWin();settleFlights();let s=history.pop();board=s.board;moves=s.moves;extra=s.extra;selected=-1;render();save();tone(390)};$('#restart').onclick=()=>reset();$('#extra').onclick=()=>{if(extra||board.length>=14)return;cancelWin();settleFlights();history.push({board:clone(board),moves,extra});board.push([]);extra=true;selected=-1;render();save();$('#message').textContent='A little breathing room. Always free.';tone(780)};$('#sound').onclick=()=>{sound=!sound;render();save();tone(720)};$('#help').onclick=()=>{settleFlights();$('#help-dialog').showModal()};$('#got-it').onclick=$('.close').onclick=()=>$('#help-dialog').close();$('#next').onclick=()=>{$('#win-dialog').close();if(level===MAX_LEVEL){openLevels();return}switchLevel(level+1)};$('#replay').onclick=()=>{$('#win-dialog').close();reset()};document.addEventListener('keydown',e=>{if(e.key==='Escape'){selected=-1;render()}if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!document.querySelector('dialog[open]')){e.preventDefault();$('#undo').click()}});
 
 function switchLevel(n){
   if(!validLevel(n)||(!allUnlocked&&n>unlocked))return false;
-  cancelWin();settleFlights();save();level=n;history=[];selected=-1;
+  stopMinimum();cancelWin();settleFlights();save();level=n;history=[];selected=-1;
   const saved=sessions[n];
-  if(saved&&validBoard(saved.board,n)){board=clone(saved.board);moves=Number.isInteger(saved.moves)&&saved.moves>=0?saved.moves:0;extra=board.length>new Set(board.flat()).size+2;render();save();}
+  if(saved&&validBoard(saved.board,n)){board=clone(saved.board);startBoard=validBoard(saved.startBoard,n)?clone(saved.startBoard):generate(n,new Set(board.flat()).size).board;moves=Number.isInteger(saved.moves)&&saved.moves>=0?saved.moves:0;extra=board.length>new Set(board.flat()).size+2;render();save();}
   else reset();
   $('#levels-dialog').close();$('#win-dialog').close();
   $('#message').textContent=won(board)?'Already sorted. Restart to play this level again.':'Tap a tube, then tap another to move marbles.';
@@ -128,7 +130,7 @@ function renderLevels(){
   }).join('');
   $('#level-grid').querySelectorAll('button').forEach(b=>b.onclick=()=>switchLevel(+b.dataset.level));
 }
-function openLevels(){cancelWin();settleFlights();save();levelPage=Math.floor((level-1)/40);renderLevels();$('#levels-dialog').showModal()}
+function openLevels(){stopMinimum();cancelWin();settleFlights();save();levelPage=Math.floor((level-1)/40);renderLevels();$('#levels-dialog').showModal()}
 $('#levels').onclick=openLevels;
 $('#levels-close').onclick=()=>$('#levels-dialog').close();
 $('#levels-prev').onclick=()=>{levelPage=Math.max(0,levelPage-1);renderLevels()};
@@ -145,4 +147,28 @@ $('#cheat-code').addEventListener('input',e=>{if(e.target.value.trim().toUpperCa
 addEventListener('resize',()=>settleFlights());
 addEventListener('scroll',()=>settleFlights(),{passive:true});
 document.addEventListener('visibilitychange',()=>{if(document.hidden)settleFlights()});
+
+let optimalWorker=null;
+function stopMinimum(){optimalWorker?.terminate();optimalWorker=null;}
+function showMinimum(){
+ stopMinimum();
+ const initial=clone(startBoard);if(extra&&initial.length<14)initial.push([]);
+ const cacheKey='prism-optimal-v1:'+JSON.stringify(initial);
+ const label=$('#win-minimum');
+ $('#win-rules').textContent=`From the starting puzzle${extra?', with the free extra tube':''}. A matching group moved together counts as one move.`;
+ try{const cached=JSON.parse(localStorage.getItem(cacheKey));if(Number.isInteger(cached)&&cached>=0){label.textContent=`Theoretical minimum: ${cached} moves`;return}}catch{}
+ label.textContent='Theoretical minimum: calculating…';
+ try{
+  optimalWorker=new Worker('./optimal-worker.js',{type:'module'});
+  optimalWorker.onmessage=({data})=>{
+   if(data.error){label.textContent='Theoretical minimum: unavailable';stopMinimum();return}
+   label.textContent=data.exact?`Theoretical minimum: ${data.minimum} moves`:`Theoretical minimum: at least ${data.minimum} moves · still calculating`;
+   if(data.exact){try{localStorage.setItem(cacheKey,JSON.stringify(data.minimum))}catch{}stopMinimum()}
+  };
+  optimalWorker.onerror=()=>{label.textContent='Theoretical minimum: unavailable';stopMinimum()};
+  optimalWorker.postMessage({board:initial});
+ }catch{label.textContent='Theoretical minimum: unavailable';stopMinimum()}
+}
+$('#win-dialog').addEventListener('close',stopMinimum);
+
 let particles=[],raf=0,ctx=$('#particles').getContext('2d');function burst(x,y,n){if(reduced)return;for(let i=0;i<n;i++)particles.push({x,y,vx:(Math.random()-.5)*8,vy:-Math.random()*7-1,life:1,size:Math.random()*4+2,c:colors[i%colors.length]});if(!raf)raf=requestAnimationFrame(frame)}function frame(){let c=ctx.canvas;if(c.width!==innerWidth||c.height!==innerHeight){c.width=innerWidth;c.height=innerHeight}ctx.clearRect(0,0,c.width,c.height);particles=particles.filter(p=>p.life>0);for(let p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=.12;p.life-=.015;ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=p.c;ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1;raf=particles.length?requestAnimationFrame(frame):0}render();if(won(board))celebrate();
