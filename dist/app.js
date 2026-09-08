@@ -1,3 +1,4 @@
+import{downloadUpdate,updateBetweenLevels}from'./pwa.js';
 import{generate,clone,complete,won,move,colorCount,MAX_LEVEL}from'./engine.js';
 const $=s=>document.querySelector(s),colors=['#ff9fbe','#00e5dc','#9b59f5','#ffe13b','#69bfff','#b2ed36','#ff8824','#f5f1e8','#ed3545','#139b56','#354dcc','#ef35bb'],names=['rose','aqua','violet','gold','blue','lime','orange','pearl','ruby','jade','indigo','magenta'];
 const icons={undo:'<path d="M9 5 3 11l6 6M3 11h11a7 7 0 0 1 0 14" transform="translate(1 -3)"/>',restart:'<path d="M20 10a8 8 0 1 1-5-6M15 1v5h5"/>',extra:'<path d="M12 4v16M4 12h16"/>',sound:'<path d="m11 4-5 4H3v8h3l5 4ZM15 8q5 4 0 8M18 4q9 8 0 16"/>',mute:'<path d="m11 4-5 4H3v8h3l5 4ZM16 9l6 6m0-6-6 6"/>'};const icon=n=>`<svg viewBox="0 0 24 24" aria-hidden="true">${icons[n]}</svg>`;['undo','restart','extra'].forEach(n=>$('#'+n+' .circle').innerHTML=icon(n));
@@ -57,7 +58,14 @@ function tubeSVG(t,id){let segments=t.map((c,i)=>{
   const hidden=[...flights].some(f=>f.to===id&&f.slot===i);
   return `<g class="marble" data-slot="${i}" style="opacity:${hidden?0:1}"><ellipse cx="41" cy="${171-i*38}" rx="17" ry="3" fill="#02061455"/><svg x="19" y="${127-i*38}" width="44" height="44">${marbleSVG(c,`${id}-${i}`)}</svg></g>`;
 }).join('');return `<svg viewBox="0 0 82 184" aria-hidden="true"><defs><linearGradient id="glass${id}"><stop stop-color="#e1eaff88"/><stop offset=".1" stop-color="#d3deff0a"/><stop offset=".5" stop-color="#cce1ff02"/><stop offset=".85" stop-color="#bacaff15"/><stop offset="1" stop-color="#dce5ff77"/></linearGradient></defs><path d="M7 10H75V143Q75 177 41 177Q7 177 7 143Z" fill="url(#glass${id})" stroke="#c7d3f4aa" stroke-width="1.5"/>${segments}<path d="M11 15V142Q11 171 40 173" fill="none" stroke="#fff9" stroke-width="2"/><path d="M71 17V141Q71 165 57 169" fill="none" stroke="#c9d8ff88" stroke-width="2"/><path d="M16 21V130" stroke="#fff4" stroke-width="3" stroke-linecap="round"/><ellipse cx="41" cy="10" rx="34" ry="5" fill="#13183077" stroke="#f3f2ffe0" stroke-width="1.5"/><ellipse cx="41" cy="11" rx="30" ry="3" fill="none" stroke="#b3c4ef88"/></svg>`}
-function render(){let container=$('#board');container.classList.toggle('many',board.length>6);container.classList.toggle('large',board.length>10);container.innerHTML=board.map((t,i)=>`<button class="tube ${complete(t)?'done':''} ${selected===i?'selected':''} ${selected>=0&&move(board,selected,i)?'valid':''}" aria-label="Tube ${i+1}: ${t.length?t.map(c=>names[c]).join(', ')+', bottom to top':'empty'}${complete(t)?', sorted':''}" aria-pressed="${selected===i}" data-i="${i}">${tubeSVG(t,i)}</button>`).join('');container.querySelectorAll('button').forEach(b=>b.onclick=()=>choose(+b.dataset.i));$('#level').textContent='LEVEL '+String(level).padStart(2,'0');$('#moves').textContent=moves;$('#sorted').textContent=board.filter(complete).length+' of '+(generateCount())+' sorted';$('#undo').disabled=!history.length;$('#extra').disabled=extra||board.length>=14;$('#sound').innerHTML=icon(sound?'sound':'mute');$('#sound').setAttribute('aria-label',sound?'Turn sound off':'Turn sound on');}
+function render(){let container=$('#board');container.classList.toggle('many',board.length>6);container.classList.toggle('large',board.length>10);const resized=container.childElementCount!==board.length;
+if(resized)container.innerHTML=board.map((_,i)=>`<button class="tube" data-i="${i}"></button>`).join('');
+container.querySelectorAll('.tube').forEach((el,i)=>{
+ const t=board[i],signature=t.join(',')+'|'+[...flights].filter(f=>f.to===i).map(f=>f.slot).join(',');
+ if(el.dataset.signature!==signature){el.innerHTML=tubeSVG(t,i);el.dataset.signature=signature}
+ el.classList.toggle('done',complete(t));
+ el.setAttribute('aria-label',`Tube ${i+1}: ${t.length?t.map(c=>names[c]).join(', ')+', bottom to top':'empty'}${complete(t)?', sorted':''}`);
+});renderSelection();if(resized)fitBoard();$('#level').textContent='LEVEL '+String(level).padStart(2,'0');$('#moves').textContent=moves;$('#sorted').textContent=board.filter(complete).length+' of '+(generateCount())+' sorted';$('#undo').disabled=!history.length;$('#extra').disabled=extra||board.length>=14;$('#sound').innerHTML=icon(sound?'sound':'mute');$('#sound').setAttribute('aria-label',sound?'Turn sound off':'Turn sound on');}
 function generateCount(){return new Set(board.flat()).size}
 function flyMarbles(a,i,result,sourceLength,destLength,from,to){
   if(reduced)return;
@@ -84,10 +92,10 @@ function flyMarbles(a,i,result,sourceLength,destLength,from,to){
 }
 function choose(i){
   if(won(board))return;
-  if(selected<0){if(!board[i].length)return;settleFlights(i);selected=i;tone(570,.055);vibrate(6);render();return}
-  if(selected===i){selected=-1;render();return}
+  if(selected<0){if(!board[i].length)return;settleFlights(i);selected=i;tone(570,.055);vibrate(6);renderSelection();return}
+  if(selected===i){selected=-1;renderSelection();return}
   const a=selected,result=move(board,a,i);
-  if(!result){selected=board[i].length?i:selected;settleFlights(i);render();
+  if(!result){selected=board[i].length?i:selected;settleFlights(i);renderSelection();
     $(`[data-i="${i}"]`).classList.add('shake');
     $('#message').textContent='Match the top marble, or use an empty tube.';tone(160,.07);return;}
   cancelWin();settleFlights(a);settleFlights(i);
@@ -104,9 +112,9 @@ function choose(i){
   }
   if(won(board))winTimer=setTimeout(()=>{winTimer=0;if(won(board))celebrate()},reduced?0:260);
 }
-function celebrate(){showMinimum();recordWin();save();$('#next').textContent=level===MAX_LEVEL?'Choose a level':'Next level →';$('#win-text').textContent=`Level ${level} complete in ${moves} moves. Take a breath. Enjoy the little win.`;if(!$('#win-dialog').open)$('#win-dialog').showModal();if(!reduced){burst(innerWidth*.3,innerHeight*.4,70);burst(innerWidth*.7,innerHeight*.4,70)}}
+function celebrate(){downloadUpdate();showMinimum();recordWin();save();$('#next').textContent=level===MAX_LEVEL?'Choose a level':'Next level →';$('#win-text').textContent=`Level ${level} complete in ${moves} moves. Take a breath. Enjoy the little win.`;if(!$('#win-dialog').open)$('#win-dialog').showModal();if(!reduced){burst(innerWidth*.3,innerHeight*.4,70);burst(innerWidth*.7,innerHeight*.4,70)}}
 function reset(){stopMinimum();cancelWin();settleFlights();board=generate(level).board;startBoard=clone(board);history=[];moves=0;extra=false;selected=-1;render();save();$('#message').textContent='Tap a tube, then tap another to move marbles.'}
-$('#undo').onclick=()=>{if(!history.length)return;cancelWin();settleFlights();let s=history.pop();board=s.board;moves=s.moves;extra=s.extra;selected=-1;render();save();tone(390)};$('#restart').onclick=()=>reset();$('#extra').onclick=()=>{if(extra||board.length>=14)return;cancelWin();settleFlights();history.push({board:clone(board),moves,extra});board.push([]);extra=true;selected=-1;render();save();$('#message').textContent='A little breathing room. Always free.';tone(780)};$('#sound').onclick=()=>{sound=!sound;render();save();tone(720)};$('#help').onclick=()=>{settleFlights();$('#help-dialog').showModal()};$('#got-it').onclick=$('.close').onclick=()=>$('#help-dialog').close();$('#next').onclick=()=>{$('#win-dialog').close();if(level===MAX_LEVEL){openLevels();return}switchLevel(level+1)};$('#replay').onclick=()=>{$('#win-dialog').close();reset()};document.addEventListener('keydown',e=>{if(e.key==='Escape'){selected=-1;render()}if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!document.querySelector('dialog[open]')){e.preventDefault();$('#undo').click()}});
+$('#undo').onclick=()=>{if(!history.length)return;cancelWin();settleFlights();let s=history.pop();board=s.board;moves=s.moves;extra=s.extra;selected=-1;render();save();tone(390)};$('#restart').onclick=()=>reset();$('#extra').onclick=()=>{if(extra||board.length>=14)return;cancelWin();settleFlights();history.push({board:clone(board),moves,extra});board.push([]);extra=true;selected=-1;render();save();$('#message').textContent='A little breathing room. Always free.';tone(780)};$('#sound').onclick=()=>{sound=!sound;render();save();tone(720)};$('#help').onclick=()=>{settleFlights();$('#help-dialog').showModal()};$('#got-it').onclick=$('.close').onclick=()=>$('#help-dialog').close();$('#next').onclick=()=>{if(level===MAX_LEVEL){$('#win-dialog').close();openLevels();return}changeLevel(level+1)};$('#replay').onclick=()=>{$('#win-dialog').close();reset()};document.addEventListener('keydown',e=>{if(e.key==='Escape'){selected=-1;render()}if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!document.querySelector('dialog[open]')){e.preventDefault();$('#undo').click()}});
 
 function switchLevel(n){
   if(!validLevel(n)||(!allUnlocked&&n>unlocked))return false;
@@ -128,7 +136,7 @@ function renderLevels(){
     const n=start+j,locked=!allUnlocked&&n>unlocked,done=completed.has(n);
     return `<button class="level-tile ${n===level?'current':''} ${done?'completed':''}" data-level="${n}" ${locked?'disabled':''} aria-label="Level ${n}${locked?', locked':done?', completed':''}" ${n===level?'aria-current="true"':''}><span>${n}</span><small>${locked?'Locked':done?'✓':`${colorCount(n)} colors`}</small></button>`;
   }).join('');
-  $('#level-grid').querySelectorAll('button').forEach(b=>b.onclick=()=>switchLevel(+b.dataset.level));
+  $('#level-grid').querySelectorAll('button').forEach(b=>b.onclick=()=>changeLevel(+b.dataset.level));
 }
 function openLevels(){stopMinimum();cancelWin();settleFlights();save();levelPage=Math.floor((level-1)/40);renderLevels();$('#levels-dialog').showModal()}
 $('#levels').onclick=openLevels;
@@ -144,7 +152,58 @@ document.addEventListener('keydown',e=>{
 });
 $('#cheat-code').addEventListener('input',e=>{if(e.target.value.trim().toUpperCase()==='POOJA'){unlockAll();e.target.value=''}});
 
-addEventListener('resize',()=>settleFlights());
+
+let changingLevel=false;
+async function changeLevel(n){
+ if(changingLevel||!validLevel(n)||(!allUnlocked&&n>unlocked))return;
+ changingLevel=true;stopMinimum();save();
+ $('#next').disabled=true;$('#level-grid').inert=true;
+ const message=$('#update-status');message.textContent='Checking for updates…';
+ try{
+  // Only reload if the destination can be restored after navigation.
+  let canReload=false;try{sessionStorage.setItem('prism-next-level',String(n));canReload=true}catch{}
+  if(canReload&&await updateBetweenLevels())return;
+  try{sessionStorage.removeItem('prism-next-level')}catch{}
+  switchLevel(n);
+ }finally{changingLevel=false;$('#next').disabled=false;$('#level-grid').inert=false;message.textContent=''}
+}
+function renderSelection(){
+ $('#board').querySelectorAll('.tube').forEach(el=>{
+  const i=+el.dataset.i;el.classList.toggle('selected',selected===i);
+  el.classList.toggle('valid',selected>=0&&!!move(board,selected,i));
+  el.setAttribute('aria-pressed',String(selected===i));
+ });
+}
+// Touch-down is the action, not a delayed synthetic click on release.
+$('#board').addEventListener('pointerdown',e=>{
+ if(!e.isPrimary||e.button!==0||changingLevel)return;
+ const tube=e.target.closest('.tube');if(!tube)return;
+ e.preventDefault();choose(+tube.dataset.i);
+});
+$('#board').addEventListener('click',e=>{
+ // Keyboard and assistive-technology activation still use click (detail 0).
+ if(e.detail!==0||changingLevel)return;
+ const tube=e.target.closest('.tube');if(tube)choose(+tube.dataset.i);
+});
+function fitBoard(){
+ const el=$('#board'),main=document.querySelector('main');if(!main)return;
+ const width=main.clientWidth-24;
+ const count=board.length,landscape=innerWidth>innerHeight;
+ const gap=landscape?8:12;
+ const chrome=document.querySelector('.intro').offsetHeight+document.querySelector('.controls').offsetHeight+$('#message').offsetHeight+document.querySelector('footer').offsetHeight+(landscape?40:70);
+ const room=Math.max(70,main.clientHeight-chrome);
+ let cols=1,size=0;
+ for(let candidate=1;candidate<=count;candidate++){
+  const rows=Math.ceil(count/candidate);
+  const proposed=Math.min(90,(width-(candidate-1)*gap)/candidate,(room-(rows-1)*gap)/rows*82/184);
+  if(proposed>size){size=proposed;cols=candidate}
+ }
+ size=Math.max(20,size);
+ el.style.setProperty('--tube-width',size+'px');el.style.gridTemplateColumns=`repeat(${cols},${size}px)`;el.style.gap=gap+'px';
+}
+addEventListener('resize',()=>{settleFlights();fitBoard()});
+window.visualViewport?.addEventListener('resize',fitBoard);
+
 addEventListener('scroll',()=>settleFlights(),{passive:true});
 document.addEventListener('visibilitychange',()=>{if(document.hidden)settleFlights()});
 
@@ -171,4 +230,4 @@ function showMinimum(){
 }
 $('#win-dialog').addEventListener('close',stopMinimum);
 
-let particles=[],raf=0,ctx=$('#particles').getContext('2d');function burst(x,y,n){if(reduced)return;for(let i=0;i<n;i++)particles.push({x,y,vx:(Math.random()-.5)*8,vy:-Math.random()*7-1,life:1,size:Math.random()*4+2,c:colors[i%colors.length]});if(!raf)raf=requestAnimationFrame(frame)}function frame(){let c=ctx.canvas;if(c.width!==innerWidth||c.height!==innerHeight){c.width=innerWidth;c.height=innerHeight}ctx.clearRect(0,0,c.width,c.height);particles=particles.filter(p=>p.life>0);for(let p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=.12;p.life-=.015;ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=p.c;ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1;raf=particles.length?requestAnimationFrame(frame):0}render();if(won(board))celebrate();
+let particles=[],raf=0,ctx=$('#particles').getContext('2d');function burst(x,y,n){if(reduced)return;for(let i=0;i<n;i++)particles.push({x,y,vx:(Math.random()-.5)*8,vy:-Math.random()*7-1,life:1,size:Math.random()*4+2,c:colors[i%colors.length]});if(!raf)raf=requestAnimationFrame(frame)}function frame(){let c=ctx.canvas;if(c.width!==innerWidth||c.height!==innerHeight){c.width=innerWidth;c.height=innerHeight}ctx.clearRect(0,0,c.width,c.height);particles=particles.filter(p=>p.life>0);for(let p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=.12;p.life-=.015;ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=p.c;ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1;raf=particles.length?requestAnimationFrame(frame):0}render();let pendingLevel=0;try{pendingLevel=Number(sessionStorage.getItem('prism-next-level'));sessionStorage.removeItem('prism-next-level')}catch{}if(validLevel(pendingLevel))switchLevel(pendingLevel);if(won(board))celebrate();
