@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { solveBounded, evaluateCandidate, searchHardLevels } from './hard-levels.js';
-import { move, won } from './engine.js';
+import { solveBounded, evaluateCandidate, searchHardLevels } from '../src/hard-levels.js';
+import { move, won } from '../src/engine.js';
 
 test('timeouts are unknown, blocked mixed tubes are proven dead ends', () => {
 	assert.equal(
