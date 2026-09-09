@@ -1,3 +1,10 @@
 node_modules/
 .vite/
 dist/
+dist-js13k/
+dist-js13k-packed/
+dist-js13k.zip
+dist-js13k-*.zip
+dist-js13k-packed-*/
+dist-js13k-packed*-tuning.json
+dist-js13k-packed-before-tuning.html

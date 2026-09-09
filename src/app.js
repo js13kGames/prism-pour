@@ -1,8 +1,9 @@
 import './style.css';
 import { reviewLayout, reviewArrow } from './review-layout.js';
 import { installWelcome } from './welcome.js';
-import { installHardLevelDebug } from './hard-level-debug.js';
 import { downloadUpdate, updateBetweenLevels } from './pwa.js';
+import { optimal, reviewMoves } from 'js13k-solver';
+import solverWorkerUrl from 'solver-worker-url';
 import {
 	generate,
 	clone,
@@ -53,7 +54,9 @@ const icons = {
 };
 const icon = (n) => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[n]}</svg>`;
 $('#settings').innerHTML = icon('settings');
-['undo', 'restart', 'extra', 'debug'].forEach((n) => ($('#' + n + ' .circle').innerHTML = icon(n)));
+['undo', 'restart', 'extra', ...(__JS13K__ ? [] : ['debug'])].forEach(
+	(n) => ($('#' + n + ' .circle').innerHTML = icon(n)),
+);
 let level = 1,
 	board = [],
 	marbleIds = [],
@@ -518,7 +521,7 @@ $('#settings').onclick = () => {
 };
 $('#got-it').onclick = $('#settings-dialog .close').onclick = () => $('#settings-dialog').close();
 $('#next').onclick = () => {
-	if (customLevel) {
+	if (customLevel && !__JS13K__) {
 		$('#win-dialog').close();
 		$('#debug-dialog').showModal();
 		return;
@@ -627,100 +630,108 @@ $('#level-jump').onsubmit = (e) => {
 	$('#level-feedback').textContent =
 		!allUnlocked && n > unlocked ? 'Finish earlier levels to unlock this one.' : '';
 };
-function unlockAll() {
-	allUnlocked = true;
-	save();
-	renderLevels();
-	$('#debug-feedback').textContent = 'Every level is unlocked.';
-	tone(990, 0.2);
-	vibrate(15);
-}
-function showDebug() {
-	$('#debug').hidden = false;
-	requestAnimationFrame(fitBoard);
-}
-let logoTaps = 0;
-$('.brand').addEventListener('click', (e) => {
-	e.preventDefault();
-	if (debugUnlocked) return;
-	logoTaps++;
-	if (logoTaps === 7) {
-		debugUnlocked = true;
-		showDebug();
+let restoreDebug = () => {};
+if (!__JS13K__) {
+	function unlockAll() {
+		allUnlocked = true;
 		save();
-		$('#message').textContent = 'Debug unlocked.';
+		renderLevels();
+		$('#debug-feedback').textContent = 'Every level is unlocked.';
 		tone(990, 0.2);
 		vibrate(15);
 	}
-});
-$('#debug').onclick = () => $('#debug-dialog').showModal();
-$('#debug-close').onclick = () => $('#debug-dialog').close();
-$('#unlock-all').onclick = unlockAll;
-['debug-colors', 'debug-capacity', 'debug-empty-tubes'].forEach((id) => {
-	const input = $('#' + id),
-		output = $('#' + id + '-value');
-	input.oninput = () => (output.value = input.value);
-});
-$('#debug-level-form').onsubmit = (e) => {
-	e.preventDefault();
-	const seed = Number($('#debug-seed').value),
-		colors = Number($('#debug-colors').value),
-		cap = Number($('#debug-capacity').value),
-		emptyTubes = Number($('#debug-empty-tubes').value),
-		hiddenColors = $('#debug-hidden-colors').checked;
-	if (
-		![seed, colors, cap, emptyTubes].every(Number.isSafeInteger) ||
-		seed < 1 ||
-		colors < 2 ||
-		colors > 12 ||
-		cap < 2 ||
-		cap > 12 ||
-		emptyTubes < 1 ||
-		emptyTubes > 6
-	) {
-		$('#debug-feedback').textContent =
-			'Use a positive seed, 2–12 colors, 2–12 slots, and 1–6 empty tubes.';
-		return;
+	function showDebug() {
+		$('#debug').hidden = false;
+		requestAnimationFrame(fitBoard);
 	}
-	loadDebugPuzzle(
-		{ seed, colors, capacity: cap, emptyTubes, hiddenColors },
-		generate(seed, colors, cap, emptyTubes).board,
-	);
-};
-function loadDebugPuzzle(options, initial) {
-	stopMinimum();
-	cancelWin();
-	settleFlights();
-	save();
-	customLevel = options;
-	board = clone(initial);
-	marbleIds = assignMarbleIds(board);
-	knownMarbles = new Set();
-	startBoard = clone(board);
-	history = [];
-	replayMoves = [];
-	moves = 0;
-	extra = false;
-	selected = -1;
-	render();
-	fitBoard();
-	startMinimumCalculation();
-	$('#debug-dialog').close();
-	document.activeElement?.blur();
-	scrollTo(0, 0);
-	$('#message').textContent =
-		`Debug puzzle: ${options.colors} colors, ${options.capacity}-slot tubes${options.hiddenColors ? ', covered colors hidden' : ''}.`;
+	let logoTaps = 0;
+	$('.brand').addEventListener('click', (e) => {
+		e.preventDefault();
+		if (debugUnlocked) return;
+		logoTaps++;
+		if (logoTaps === 7) {
+			debugUnlocked = true;
+			showDebug();
+			save();
+			$('#message').textContent = 'Debug unlocked.';
+			tone(990, 0.2);
+			vibrate(15);
+		}
+	});
+	$('#debug').onclick = () => $('#debug-dialog').showModal();
+	$('#debug-close').onclick = () => $('#debug-dialog').close();
+	$('#unlock-all').onclick = unlockAll;
+	['debug-colors', 'debug-capacity', 'debug-empty-tubes'].forEach((id) => {
+		const input = $('#' + id),
+			output = $('#' + id + '-value');
+		input.oninput = () => (output.value = input.value);
+	});
+	$('#debug-level-form').onsubmit = (e) => {
+		e.preventDefault();
+		const seed = Number($('#debug-seed').value),
+			colors = Number($('#debug-colors').value),
+			cap = Number($('#debug-capacity').value),
+			emptyTubes = Number($('#debug-empty-tubes').value),
+			hiddenColors = $('#debug-hidden-colors').checked;
+		if (
+			![seed, colors, cap, emptyTubes].every(Number.isSafeInteger) ||
+			seed < 1 ||
+			colors < 2 ||
+			colors > 12 ||
+			cap < 2 ||
+			cap > 12 ||
+			emptyTubes < 1 ||
+			emptyTubes > 6
+		) {
+			$('#debug-feedback').textContent =
+				'Use a positive seed, 2–12 colors, 2–12 slots, and 1–6 empty tubes.';
+			return;
+		}
+		loadDebugPuzzle(
+			{ seed, colors, capacity: cap, emptyTubes, hiddenColors },
+			generate(seed, colors, cap, emptyTubes).board,
+		);
+	};
+	function loadDebugPuzzle(options, initial) {
+		stopMinimum();
+		cancelWin();
+		settleFlights();
+		save();
+		customLevel = options;
+		board = clone(initial);
+		marbleIds = assignMarbleIds(board);
+		knownMarbles = new Set();
+		startBoard = clone(board);
+		history = [];
+		replayMoves = [];
+		moves = 0;
+		extra = false;
+		selected = -1;
+		render();
+		fitBoard();
+		startMinimumCalculation();
+		$('#debug-dialog').close();
+		document.activeElement?.blur();
+		scrollTo(0, 0);
+		$('#message').textContent =
+			`Debug puzzle: ${options.colors} colors, ${options.capacity}-slot tubes${options.hiddenColors ? ', covered colors hidden' : ''}.`;
+	}
+	void import('./hard-level-debug.js').then(({ installHardLevelDebug }) => {
+		installHardLevelDebug(
+			() => ({
+				seed: Number($('#debug-seed').value),
+				colors: Number($('#debug-colors').value),
+				capacity: Number($('#debug-capacity').value),
+				emptyTubes: Number($('#debug-empty-tubes').value),
+				hiddenColors: $('#debug-hidden-colors').checked,
+			}),
+			loadDebugPuzzle,
+		);
+	});
+	restoreDebug = () => {
+		if (debugUnlocked) showDebug();
+	};
 }
-installHardLevelDebug(
-	() => ({
-		seed: Number($('#debug-seed').value),
-		colors: Number($('#debug-colors').value),
-		capacity: Number($('#debug-capacity').value),
-		emptyTubes: Number($('#debug-empty-tubes').value),
-		hiddenColors: $('#debug-hidden-colors').checked,
-	}),
-	loadDebugPuzzle,
-);
 
 let changingLevel = false;
 async function changeLevel(n) {
@@ -797,7 +808,7 @@ function fitBoard() {
 		document.querySelector('.controls').offsetHeight +
 		$('#message').offsetHeight +
 		document.querySelector('footer').offsetHeight +
-		($('#debug').hidden ? 0 : $('#debug').offsetHeight + 18) +
+		(__JS13K__ || $('#debug').hidden ? 0 : $('#debug').offsetHeight + 18) +
 		(landscape ? 40 : 70);
 	const room = Math.max(70, main.clientHeight - chrome);
 	let cols = 1,
@@ -914,31 +925,44 @@ function startMinimumCalculation() {
 		optimalWorker = null;
 		refreshMinimumDisplay();
 	}
+	function receive(data) {
+		if (minimumCalculation !== calculation) return;
+		if (data.error) {
+			failed();
+			return;
+		}
+		if (data.exact && !validatedBestReplay(initial, data)) {
+			failed();
+			return;
+		}
+		calculation.result = data;
+		if (data.exact) {
+			try {
+				localStorage.setItem(key, JSON.stringify(data));
+			} catch {}
+			optimalWorker?.terminate();
+			optimalWorker = null;
+		}
+		refreshMinimumDisplay();
+	}
+
+	if (__JS13K__) {
+		try {
+			optimal(initial, receive, activeCapacity());
+		} catch {
+			failed();
+		}
+		return;
+	}
 
 	try {
-		optimalWorker = new Worker(new URL('./optimal-worker.js', import.meta.url), { type: 'module' });
+		optimalWorker = new Worker(solverWorkerUrl, { type: 'module' });
 		optimalWorker.onmessage = ({ data }) => {
-			if (minimumCalculation !== calculation) return;
-			if (data.error) {
-				failed();
-				return;
-			}
-			if (data.exact && !validatedBestReplay(initial, data)) {
-				failed();
-				return;
-			}
-			calculation.result = data;
-			if (data.exact) {
-				try {
-					localStorage.setItem(key, JSON.stringify(data));
-				} catch {}
-				optimalWorker?.terminate();
-				optimalWorker = null;
-			}
-			refreshMinimumDisplay();
+			if (data.operation !== 'solve') return;
+			receive(data);
 		};
 		optimalWorker.onerror = failed;
-		optimalWorker.postMessage({ board: initial, cap: activeCapacity() });
+		optimalWorker.postMessage({ operation: 'solve', board: initial, cap: activeCapacity() });
 	} catch {
 		failed();
 	}
@@ -958,9 +982,22 @@ function startReview() {
 		reviewStatus = 'missing';
 		return;
 	}
-	const worker = new Worker(new URL('./review-worker.js', import.meta.url), { type: 'module' });
+	if (__JS13K__) {
+		try {
+			reviewMoves(startBoard, replayMoves, activeCapacity(), (review, count) => {
+				moveReviews[count - 1] = review;
+			});
+			reviewStatus = 'done';
+		} catch {
+			reviewStatus = 'error';
+		}
+		renderComparison();
+		return;
+	}
+	const worker = new Worker(solverWorkerUrl, { type: 'module' });
 	reviewWorker = worker;
 	worker.onmessage = ({ data }) => {
+		if (data.operation !== 'review') return;
 		if (reviewWorker !== worker) return;
 		if (data.review) moveReviews[data.count - 1] = data.review;
 		if (data.error || data.done) {
@@ -974,7 +1011,12 @@ function startReview() {
 		stopReview();
 		renderComparison();
 	};
-	worker.postMessage({ board: startBoard, events: replayMoves, cap: activeCapacity() });
+	worker.postMessage({
+		operation: 'review',
+		board: startBoard,
+		events: replayMoves,
+		cap: activeCapacity(),
+	});
 }
 function reviewBoardSVG(position, review) {
 	if (!position) return '';
@@ -1136,7 +1178,7 @@ function frame() {
 	raf = particles.length ? requestAnimationFrame(frame) : 0;
 }
 render();
-if (debugUnlocked) showDebug();
+restoreDebug();
 let pendingLevel = 0;
 try {
 	pendingLevel = Number(sessionStorage.getItem('prism-next-level'));
@@ -1152,10 +1194,11 @@ if (
 		dialog: $('#welcome-dialog'),
 		play: $('#welcome-play'),
 		close: $('#welcome-close'),
-		debug: $('#debug-welcome'),
+		debug: __JS13K__ ? { focus() {}, onclick: null } : $('#debug-welcome'),
 		settle: settleFlights,
 		onDismiss: showRestoredWin,
 		storage: () => localStorage,
 	})
 )
 	showRestoredWin();
+if (!__JS13K__) import('./background.css');
