@@ -1,5 +1,5 @@
 # Prism Pour release requirements
 
-This is a static PWA. After any change to dist/, run `python scripts/prepare-pwa.py` BEFORE committing and packaging. Commit the resulting dist/sw.js and dist/version.json with the source. The worker verifies all release asset hashes; forgetting this step prevents clients from receiving updates.
+This is a static Vite PWA powered by `vite-plugin-pwa`. After source or asset changes, run `npm run build` before committing or packaging. Commit the generated `dist/` output, including `dist/sw.js` and `dist/manifest.webmanifest`.
 
-Preserve the between-level-only update activation, offline fallback, stored progress, and instant pointer controls. No reloads during an active puzzle. Do not add automatic skipWaiting during service-worker install.
+Preserve the between-level-only update activation, offline fallback, stored progress, and instant pointer controls. No reloads during an active puzzle. Keep Workbox `skipWaiting` disabled so the app activates updates only after the player chooses a new level.
