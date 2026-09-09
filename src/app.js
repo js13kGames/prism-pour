@@ -1,4 +1,6 @@
 import './style.css';
+import { reviewLayout, reviewArrow } from './review-layout.js';
+import { installWelcome } from './welcome.js';
 import { installHardLevelDebug } from './hard-level-debug.js';
 import { downloadUpdate, updateBetweenLevels } from './pwa.js';
 import {
@@ -46,10 +48,11 @@ const icons = {
 	restart: '<path d="M20 10a8 8 0 1 1-5-6M15 1v5h5"/>',
 	extra: '<path d="M12 4v16M4 12h16"/>',
 	debug: '<path d="M8 5 3 12l5 7M16 5l5 7-5 7M14 4l-4 16"/>',
-	sound: '<path d="m11 4-5 4H3v8h3l5 4ZM15 8q5 4 0 8M18 4q9 8 0 16"/>',
-	mute: '<path d="m11 4-5 4H3v8h3l5 4ZM16 9l6 6m0-6-6 6"/>',
+	settings:
+		'<path d="m9 3 1-2h4l1 2 2 1 2 0 2 3-1 2v3l1 2-2 3-2 0-2 1-1 3h-4l-1-3-2-1H5l-2-3 1-2V9L3 7l2-3h2Z"/><circle cx="12" cy="11" r="3"/>',
 };
 const icon = (n) => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[n]}</svg>`;
+$('#settings').innerHTML = icon('settings');
 ['undo', 'restart', 'extra', 'debug'].forEach((n) => ($('#' + n + ' .circle').innerHTML = icon(n)));
 let level = 1,
 	board = [],
@@ -60,6 +63,7 @@ let level = 1,
 	selected = -1,
 	moves = 0,
 	sound = true,
+	numberedMarbles = false,
 	extra = false,
 	audio;
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -70,6 +74,7 @@ let unlocked = 1,
 	debugUnlocked = false,
 	customLevel = null,
 	completed = new Set(),
+	perfectLevels = new Set(),
 	sessions = {},
 	levelPage = 0;
 const validLevel = (n) => Number.isInteger(n) && n >= 1 && n <= MAX_LEVEL;
@@ -104,6 +109,7 @@ try {
 		replayMoves = Array.isArray(s.replayMoves) ? s.replayMoves : null;
 		level = s.level;
 		if (typeof s.sound === 'boolean') sound = s.sound;
+		numberedMarbles = s.numberedMarbles === true;
 		unlocked = Math.max(level, validLevel(s.unlocked) ? s.unlocked : level);
 		allUnlocked = s.allUnlocked === true;
 		debugUnlocked = s.debugUnlocked === true;
@@ -111,6 +117,11 @@ try {
 			Array.isArray(s.completed)
 				? s.completed.filter(validLevel)
 				: Array.from({ length: level - 1 }, (_, i) => i + 1),
+		);
+		perfectLevels = new Set(
+			Array.isArray(s.perfectLevels)
+				? s.perfectLevels.filter((n) => validLevel(n) && completed.has(n))
+				: [],
 		);
 		if (s.sessions && typeof s.sessions === 'object' && !Array.isArray(s.sessions))
 			sessions = s.sessions;
@@ -155,10 +166,12 @@ function save() {
 				replayMoves: customLevel ? (sessions[level]?.replayMoves ?? null) : replayMoves,
 				moves: customLevel ? (sessions[level]?.moves ?? 0) : moves,
 				sound,
+				numberedMarbles,
 				unlocked,
 				allUnlocked,
 				debugUnlocked,
 				completed: [...completed],
+				perfectLevels: [...perfectLevels],
 				sessions,
 			}),
 		);
@@ -167,6 +180,8 @@ function save() {
 function recordWin() {
 	if (!customLevel && won(board, activeCapacity())) {
 		completed.add(level);
+		if (minimumCalculation?.result?.exact && moves === minimumCalculation.result.minimum)
+			perfectLevels.add(level);
 		unlocked = Math.max(unlocked, Math.min(MAX_LEVEL, level + 1));
 	}
 }
@@ -227,7 +242,7 @@ function marbleSVG(c, id, concealed = false) {
   </defs><circle cx="22" cy="22" r="20" fill="url(#ball${id})" stroke="${marbleColor}" stroke-width=".8"/>
   <ellipse cx="15" cy="12" rx="6" ry="3.2" transform="rotate(-32 15 12)" fill="#fff" opacity=".75"/>
   <path d="M29 36Q36 33 38 26" fill="none" stroke="${marbleColor}" stroke-width="2" stroke-linecap="round"/>
-  <circle cx="29" cy="13" r="1.8" fill="#fff" opacity=".45"/>${concealed ? '<text x="22" y="28" text-anchor="middle" fill="#f5f3ff" font-family="sans-serif" font-size="20" font-weight="700">?</text>' : ''}</svg>`;
+  <circle cx="29" cy="13" r="1.8" fill="#fff" opacity=".45"/>${concealed ? '<text x="22" y="28" text-anchor="middle" fill="#f5f3ff" font-family="sans-serif" font-size="20" font-weight="700">?</text>' : numberedMarbles ? `<text x="22" y="29" text-anchor="middle" fill="#fff" stroke="#10152e" stroke-width="3" paint-order="stroke" font-family="sans-serif" font-size="21" font-weight="800">${c + 1}</text>` : ''}</svg>`;
 }
 function marbleIsConcealed(tube, slot, tubeId) {
 	if (!customLevel?.hiddenColors) return false;
@@ -249,7 +264,7 @@ function tubeSVG(t, id) {
 			return `<g class="marble" data-slot="${i}" style="opacity:${inFlight ? 0 : 1}"><ellipse cx="41" cy="${bottom - i * 38}" rx="17" ry="3" fill="#02061455"/><svg x="19" y="${bottom - 44 - i * 38}" width="44" height="44">${marbleSVG(c, `${id}-${i}`, concealed)}</svg></g>`;
 		})
 		.join('');
-	return `<svg viewBox="0 0 82 ${height}" aria-hidden="true"><defs><linearGradient id="glass${id}"><stop stop-color="#e1eaff88"/><stop offset=".1" stop-color="#d3deff0a"/><stop offset=".5" stop-color="#cce1ff02"/><stop offset=".85" stop-color="#bacaff15"/><stop offset="1" stop-color="#dce5ff77"/></linearGradient></defs><path d="M7 10H75V${innerBottom}Q75 ${outerBottom} 41 ${outerBottom}Q7 ${outerBottom} 7 ${innerBottom}Z" fill="url(#glass${id})" stroke="#c7d3f4aa" stroke-width="1.5"/>${segments}<path d="M11 15V${innerBottom - 1}Q11 ${outerBottom - 6} 40 ${outerBottom - 4}" fill="none" stroke="#fff9" stroke-width="2"/><path d="M71 17V${innerBottom - 2}Q71 ${outerBottom - 12} 57 ${outerBottom - 8}" fill="none" stroke="#c9d8ff88" stroke-width="2"/><path d="M16 21V${innerBottom - 13}" stroke="#fff4" stroke-width="3" stroke-linecap="round"/><ellipse cx="41" cy="10" rx="34" ry="5" fill="#13183077" stroke="#f3f2ffe0" stroke-width="1.5"/><ellipse cx="41" cy="11" rx="30" ry="3" fill="none" stroke="#b3c4ef88"/></svg>`;
+	return `<svg viewBox="0 0 82 ${height}" aria-hidden="true"><defs><linearGradient id="glass${id}"><stop stop-color="#e1eaff88"/><stop offset=".1" stop-color="#d3deff0a"/><stop offset=".5" stop-color="#cce1ff02"/><stop offset=".85" stop-color="#bacaff15"/><stop offset="1" stop-color="#dce5ff77"/></linearGradient></defs><path d="M9 10H73V${innerBottom}Q73 ${outerBottom} 41 ${outerBottom}Q9 ${outerBottom} 9 ${innerBottom}Z" fill="url(#glass${id})" stroke="#c7d3f4aa" stroke-width="1.5"/>${segments}<path d="M13 15V${innerBottom - 1}Q13 ${outerBottom - 6} 40 ${outerBottom - 4}" fill="none" stroke="#fff9" stroke-width="2"/><path d="M69 17V${innerBottom - 2}Q69 ${outerBottom - 12} 57 ${outerBottom - 8}" fill="none" stroke="#c9d8ff88" stroke-width="2"/><path d="M18 21V${innerBottom - 13}" stroke="#fff4" stroke-width="3" stroke-linecap="round"/><ellipse cx="41" cy="10" rx="32" ry="5" fill="#13183077" stroke="#f3f2ffe0" stroke-width="1.5"/><ellipse cx="41" cy="11" rx="28" ry="3" fill="none" stroke="#b3c4ef88"/></svg>`;
 }
 function render() {
 	revealTopMarbles();
@@ -264,6 +279,8 @@ function render() {
 	container.querySelectorAll('.tube').forEach((el, i) => {
 		const t = board[i],
 			signature =
+				Number(numberedMarbles) +
+				'|' +
 				t.join(',') +
 				'|' +
 				[...flights]
@@ -293,8 +310,8 @@ function render() {
 		' sorted';
 	$('#undo').disabled = !history.length;
 	$('#extra').disabled = extra || board.length >= 14;
-	$('#sound').innerHTML = icon(sound ? 'sound' : 'mute');
-	$('#sound').setAttribute('aria-label', sound ? 'Turn sound off' : 'Turn sound on');
+	$('#sound-toggle').checked = sound;
+	$('#numbered-marbles').checked = numberedMarbles;
 }
 function generateCount() {
 	return new Set(board.flat()).size;
@@ -484,17 +501,22 @@ $('#extra').onclick = () => {
 	$('#message').textContent = 'A little breathing room. Always free.';
 	tone(780);
 };
-$('#sound').onclick = () => {
-	sound = !sound;
-	render();
+$('#sound-toggle').onchange = (e) => {
+	sound = e.target.checked;
 	save();
 	tone(720);
 };
-$('#help').onclick = () => {
+$('#numbered-marbles').onchange = (e) => {
+	numberedMarbles = e.target.checked;
 	settleFlights();
-	$('#help-dialog').showModal();
+	render();
+	save();
 };
-$('#got-it').onclick = $('.close').onclick = () => $('#help-dialog').close();
+$('#settings').onclick = () => {
+	settleFlights();
+	$('#settings-dialog').showModal();
+};
+$('#got-it').onclick = $('#settings-dialog .close').onclick = () => $('#settings-dialog').close();
 $('#next').onclick = () => {
 	if (customLevel) {
 		$('#win-dialog').close();
@@ -567,8 +589,9 @@ function renderLevels() {
 	$('#level-grid').innerHTML = Array.from({ length: end - start + 1 }, (_, j) => {
 		const n = start + j,
 			locked = !allUnlocked && n > unlocked,
-			done = completed.has(n);
-		return `<button class="level-tile ${n === level ? 'current' : ''} ${done ? 'completed' : ''}" data-level="${n}" ${locked ? 'disabled' : ''} aria-label="Level ${n}${locked ? ', locked' : done ? ', completed' : isDeepLevel(n) ? ', deep pour' : ''}" ${n === level ? 'aria-current="true"' : ''}><span>${n}</span><small>${locked ? 'Locked' : done ? '✓' : isDeepLevel(n) ? `${colorCount(n)} colors · deep` : `${colorCount(n)} colors`}</small></button>`;
+			done = completed.has(n),
+			perfect = perfectLevels.has(n);
+		return `<button class="level-tile ${n === level ? 'current' : ''} ${done ? 'completed' : ''} ${perfect ? 'perfect' : ''}" data-level="${n}" ${locked ? 'disabled' : ''} aria-label="Level ${n}${locked ? ', locked' : perfect ? ', completed perfectly' : done ? ', completed' : isDeepLevel(n) ? ', deep pour' : ''}" ${n === level ? 'aria-current="true"' : ''}><span>${n}</span><small>${locked ? 'Locked' : perfect ? '★' : done ? '✓' : isDeepLevel(n) ? `${colorCount(n)} colors · deep` : `${colorCount(n)} colors`}</small></button>`;
 	}).join('');
 	$('#level-grid')
 		.querySelectorAll('button')
@@ -708,7 +731,7 @@ async function changeLevel(n) {
 	$('#next').disabled = true;
 	$('#level-grid').inert = true;
 	const message = $('#update-status');
-	message.textContent = 'Checking for updates…';
+	message.textContent = '';
 	try {
 		// Only reload if the destination can be restored after navigation.
 		let canReload = false;
@@ -860,6 +883,11 @@ function validatedBestReplay(initial, result) {
 	return candidate;
 }
 function refreshMinimumDisplay() {
+	if (!customLevel && won(board, activeCapacity())) {
+		recordWin();
+		save();
+		if ($('#levels-dialog').open) renderLevels();
+	}
 	if ($('#win-dialog').open) showMinimum();
 }
 function startMinimumCalculation() {
@@ -950,16 +978,14 @@ function startReview() {
 }
 function reviewBoardSVG(position, review) {
 	if (!position) return '';
-	const width = position.length * 100,
-		height = tubeHeight();
+	const height = tubeHeight();
+	const layout = reviewLayout(position.length, height, $('#review-board').clientWidth - 26 || 300);
 	function arrow(from, to, color, lane, label) {
-		const x = from * 100 + 50,
-			end = to * 100 + 50,
-			direction = Math.sign(end - x),
+		const route = reviewArrow(layout, from, to, lane === 95),
 			marker = `review-arrow-${color}`;
 		return `<defs><marker id="${marker}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10Z" fill="${color}"/></marker></defs>
-		<path d="M${x} 130V${lane + 14}Q${x} ${lane} ${x + direction * 14} ${lane}H${end - direction * 14}Q${end} ${lane} ${end} ${lane + 14}V126" fill="none" stroke="${color}" stroke-width="4" stroke-linejoin="round" marker-end="url(#${marker})"/>
-		<text x="${(x + end) / 2}" y="${lane - 10}" text-anchor="middle" fill="${color}" stroke="#171b32" stroke-width="5" paint-order="stroke" font-size="20" font-weight="700">${label}</text>`;
+		<path d="${route.path}" fill="none" stroke="${color}" stroke-width="4" stroke-linejoin="round" marker-end="url(#${marker})"/>
+		<text x="${route.labelX}" y="${route.labelY}" text-anchor="middle" fill="${color}" stroke="#171b32" stroke-width="5" paint-order="stroke" font-size="20" font-weight="700">${label}</text>`;
 	}
 	const arrows = review
 		? arrow(
@@ -973,12 +999,12 @@ function reviewBoardSVG(position, review) {
 	const description = review
 		? `Your move: tube ${review.from + 1} to ${review.to + 1}. ${review.good ? 'Optimal.' : `Mistake, ${review.cost} extra moves. Optimal: tube ${review.recommended[0] + 1} to ${review.recommended[1] + 1}.`}`
 		: 'Starting position';
-	return `<svg class="review-position" style="min-width:${position.length * 54}px" viewBox="0 0 ${width} ${height + 175}" role="img" aria-label="${description}">${arrows}${position
-		.map(
-			(tube, i) =>
-				`<g transform="translate(${i * 100 + 9},140)"><svg width="82" height="${height}">${tubeSVG(tube, `review-${i}`)}</svg><text x="41" y="${height + 24}" fill="#dce3ff" font-size="20" text-anchor="middle">${i + 1}</text></g>`,
-		)
-		.join('')}</svg>`;
+	return `<svg class="review-position" viewBox="0 0 ${layout.width} ${layout.height}" role="img" aria-label="${description}">${position
+		.map((tube, i) => {
+			const point = layout.position(i);
+			return `<g transform="translate(${point.x - 41},${point.y})"><svg width="82" height="${height}">${tubeSVG(tube, `review-${i}`)}</svg><text x="41" y="${height + 24}" fill="#dce3ff" font-size="20" text-anchor="middle">${i + 1}</text></g>`;
+		})
+		.join('')}${arrows}</svg>`;
 }
 function renderComparison() {
 	const max = yourReplay?.count || 0;
@@ -1022,9 +1048,12 @@ function renderComparison() {
 $('#compare').onclick = () => {
 	comparisonStep = yourReplay?.count ? 1 : 0;
 	startReview();
-	renderComparison();
 	$('#compare-dialog').showModal();
+	renderComparison();
 };
+new ResizeObserver(() => {
+	if ($('#compare-dialog').open) renderComparison();
+}).observe($('#review-board'));
 $('#compare-close').onclick = () => $('#compare-dialog').close();
 $('#compare-dialog').addEventListener('close', stopReview);
 $('#compare-prev').onclick = () => {
@@ -1115,4 +1144,18 @@ try {
 } catch {}
 if (validLevel(pendingLevel)) switchLevel(pendingLevel);
 startMinimumCalculation();
-if (won(board, activeCapacity())) celebrate();
+const showRestoredWin = () => {
+	if (won(board, activeCapacity()) && !$('#win-dialog').open) celebrate();
+};
+if (
+	!installWelcome({
+		dialog: $('#welcome-dialog'),
+		play: $('#welcome-play'),
+		close: $('#welcome-close'),
+		debug: $('#debug-welcome'),
+		settle: settleFlights,
+		onDismiss: showRestoredWin,
+		storage: () => localStorage,
+	})
+)
+	showRestoredWin();

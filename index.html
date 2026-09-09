@@ -48,8 +48,7 @@
 				Prism Pour
 			</a>
 			<div class="top-actions">
-				<button class="circle" id="sound" aria-label="Turn sound on"></button
-				><button class="circle" id="help" aria-label="How to play">?</button>
+				<button class="circle" id="settings" aria-label="Settings"></button>
 			</div>
 		</header>
 		<main>
@@ -76,10 +75,12 @@
 			<footer><span></span>No ads. Just flow.<span></span></footer>
 		</main>
 		<canvas id="particles" aria-hidden="true"></canvas>
-		<dialog id="help-dialog">
-			<button class="close" aria-label="Close">×</button>
-			<div class="dialog-icon">✧</div>
-			<h2>Find your flow</h2>
+		<dialog id="welcome-dialog" aria-labelledby="welcome-title">
+			<button class="close" id="welcome-close" aria-label="Close welcome">×</button>
+			<div class="dialog-icon" aria-hidden="true">✧</div>
+			<div class="eyebrow">WELCOME TO PRISM POUR</div>
+			<h2 id="welcome-title">Find your flow</h2>
+			<p>A little moment of flow. No ads. Just colorful marble puzzles.</p>
 			<p>Tap a tube to select its top marbles. Tap another to send them over.</p>
 			<p>
 				Move marbles onto the <strong>same color</strong> or into an <strong>empty tube</strong>, as
@@ -89,12 +90,40 @@
 				Fill each tube with one color to finish. Undo anytime, or add a free extra tube if you’re
 				stuck.
 			</p>
+			<p>Use the gear for sound and numbered marbles to help distinguish colors.</p>
+			<button class="primary" id="welcome-play" autofocus>Let’s play</button>
+		</dialog>
+		<dialog id="settings-dialog" aria-labelledby="settings-title">
+			<button class="close" aria-label="Close">×</button>
+			<h2 id="settings-title">Settings</h2>
+			<label class="setting-row" for="numbered-marbles">
+				<span
+					><strong>Numbered marbles</strong><small>Match numbers as well as colors.</small></span
+				>
+				<input class="ios-toggle" id="numbered-marbles" type="checkbox" role="switch" />
+			</label>
+			<label class="setting-row" for="sound-toggle">
+				<span><strong>Sound</strong><small>Play game sounds.</small></span>
+				<input class="ios-toggle" id="sound-toggle" type="checkbox" role="switch" checked />
+			</label>
+			<details class="settings-help">
+				<summary>How to play</summary>
+				<p>Tap a tube to select its top marbles. Tap another to send them over.</p>
+				<p>
+					Move marbles onto the <strong>same color</strong> or into an <strong>empty tube</strong>,
+					as long as there’s room.
+				</p>
+				<p>
+					Fill each tube with one color to finish. Undo anytime, or add a free extra tube if you’re
+					stuck.
+				</p>
+			</details>
 			<button class="primary" id="install">Add to Home Screen</button>
 			<p id="install-help" hidden>
 				On iPhone or iPad, open this site in Safari, tap Share, then Add to Home Screen. On Android,
 				use your browser’s Install app or Add to Home screen option.
 			</p>
-			<button class="primary" id="got-it">Let’s play</button>
+			<button class="primary" id="got-it">Done</button>
 		</dialog>
 		<dialog id="win-dialog">
 			<div class="dialog-icon">✦</div>
@@ -136,7 +165,7 @@
 			<h2 id="compare-title">Move review</h2>
 			<p id="compare-summary"></p>
 			<p id="move-rating" role="status" aria-live="polite"></p>
-			<p>
+			<p class="review-explanation">
 				Each move is judged from your position at that moment. All shortest routes count. Extra
 				tubes are free when added; undone moves are excluded.
 			</p>
@@ -188,6 +217,7 @@
 				<button class="primary" type="submit">Create debug level</button>
 			</form>
 			<button class="text-button" id="unlock-all">Unlock all levels</button>
+			<button class="text-button" id="debug-welcome">About / Welcome</button>
 			<section class="hard-search" aria-labelledby="hard-title">
 				<h3 id="hard-title">Find a hard level</h3>
 				<p>

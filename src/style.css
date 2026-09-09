@@ -555,6 +555,79 @@ dialog p {
 	grid-template-columns: repeat(5, minmax(0, 1fr));
 	gap: 8px;
 }
+.setting-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	min-height: 76px;
+	padding: 12px 0;
+	text-align: left;
+	border-bottom: 1px solid #bac4ff26;
+	cursor: pointer;
+}
+.setting-row strong {
+	font-size: 16px;
+}
+.setting-row small {
+	display: block;
+	margin-top: 6px;
+	color: #bdc7e9;
+	font-size: 14px;
+}
+.ios-toggle {
+	appearance: none;
+	-webkit-appearance: none;
+	flex: 0 0 72px;
+	width: 72px;
+	height: 44px;
+	margin: 0;
+	border: 2px solid #747c99;
+	border-radius: 999px;
+	background: #424960;
+	position: relative;
+	cursor: pointer;
+	transition:
+		background 0.18s,
+		border-color 0.18s;
+}
+.ios-toggle::before {
+	content: '';
+	position: absolute;
+	width: 34px;
+	height: 34px;
+	top: 3px;
+	left: 3px;
+	border-radius: 50%;
+	background: white;
+	box-shadow: 0 2px 5px #0005;
+	transition: transform 0.18s;
+}
+.ios-toggle:checked {
+	background: #69bf32;
+	border-color: #b2ed36;
+}
+.ios-toggle:checked::before {
+	transform: translateX(28px);
+}
+.ios-toggle:focus-visible {
+	outline: 3px solid #dfcbff;
+	outline-offset: 4px;
+}
+.settings-help {
+	margin: 22px 0;
+	text-align: left;
+}
+.settings-help summary {
+	cursor: pointer;
+	padding: 12px 0;
+}
+@media (prefers-reduced-motion: reduce) {
+	.ios-toggle,
+	.ios-toggle::before {
+		transition: none;
+	}
+}
 .level-tile {
 	min-height: 61px;
 	background: #aab9ff0c;
@@ -575,8 +648,23 @@ dialog p {
 	color: #adb8da;
 }
 .level-tile.completed {
-	background: #63e5cf12;
-	border-color: #63e5cf66;
+	background: #b2ed3633;
+	border-color: #b2ed36cc;
+	box-shadow: inset 0 0 16px #b2ed3614;
+}
+.level-tile.completed small {
+	color: #c7ff57;
+	font-size: 20px;
+	font-weight: bold;
+}
+.level-tile.perfect small {
+	color: #ffe36b;
+}
+.level-tile.completed.current {
+	background: #b2ed3633;
+}
+.level-tile.completed:hover:not(:disabled) {
+	background: #b2ed364d;
 }
 .level-tile.current {
 	border: 2px solid #c7afff;
@@ -987,16 +1075,46 @@ dialog {
 	gap: 12px;
 }
 #review-board {
-	overflow-x: auto;
-	padding: 12px;
+	min-width: 0;
+	min-height: 0;
+	flex: 1;
+	position: relative;
+	padding: 4px;
 	border: 1px solid #b8c3ff33;
 	border-radius: 16px;
 	background: #a5acff0a;
 }
 .review-position {
 	display: block;
-	width: 100%;
-	max-height: 55dvh;
+	position: absolute;
+	inset: 4px;
+	width: calc(100% - 8px);
+	height: calc(100% - 8px);
+}
+#compare-dialog[open] {
+	display: flex;
+	flex-direction: column;
+	height: calc(100dvh - 16px);
+	max-height: calc(100dvh - 16px);
+	box-sizing: border-box;
+}
+#compare-dialog h2 {
+	margin: 0 0 6px;
+}
+#compare-dialog p {
+	margin: 3px 0;
+	line-height: 1.2;
+}
+#compare-dialog .review-explanation {
+	display: none;
+}
+#compare-dialog .comparison-controls {
+	flex-shrink: 0;
+	margin-top: 4px;
+}
+#compare-step {
+	flex-shrink: 0;
+	margin: 0;
 }
 .comparison-controls button {
 	min-width: 48px;
@@ -1019,7 +1137,9 @@ dialog {
 		gap: 10px;
 	}
 	#compare-dialog {
-		padding: 22px 14px;
+		padding: 12px 6px 6px;
+		width: calc(100vw - 12px);
+		max-width: calc(100vw - 12px);
 	}
 	.replay-board {
 		max-width: 360px;
