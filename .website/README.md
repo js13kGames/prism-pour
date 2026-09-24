@@ -1,4 +1,7 @@
 ---
+genres:
+  - puzzle
+  - casual
 directors_cut: https://prism-pour.basicer.chatgpt.site/
 # See github.com/js13kGames/hello-world for supported frontmatter
 ---
